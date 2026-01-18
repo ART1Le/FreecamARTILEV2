@@ -1,13 +1,23 @@
+--[[ 
+    CINEMATIC FREECAM PRO - UPDATED
+    Fitur Baru:
+    1. Draggable GUI (Bisa digeser)
+    2. Fix tombol 'N' (Tidak hilang saat mengetik chat)
+    3. Autocomplete Player List (Muncul saran nama saat mengetik)
+    4. Code Clean Up (Lebih rapi & terstruktur)
+]]
+
 -- SERVICES
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local StarterGui = game:GetService("StarterGui")
+local TweenService = game:GetService("TweenService")
 
 local localPlayer = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 
--- Module Kontrol
+-- MODULE KONTROL
 local PlayerModule = require(localPlayer:WaitForChild("PlayerScripts"):WaitForChild("PlayerModule"))
 local Controls = PlayerModule:GetControls()
 
@@ -15,28 +25,31 @@ local Controls = PlayerModule:GetControls()
 local Theme = {
     Colors = {
         Background = Color3.fromRGB(28, 32, 40),
-        Surface = Color3.fromRGB(36, 40, 50),
-        Border = Color3.fromRGB(70, 78, 98),
-        Text = Color3.fromRGB(245, 250, 255),
-        Accent = Color3.fromRGB(0, 170, 255),
-        ToggleOn = Color3.fromRGB(0, 180, 255),
-        Button = Color3.fromRGB(44, 48, 60),
-        Input = Color3.fromRGB(20, 24, 30),
+        Surface    = Color3.fromRGB(36, 40, 50),
+        Border     = Color3.fromRGB(70, 78, 98),
+        Text       = Color3.fromRGB(245, 250, 255),
+        Accent     = Color3.fromRGB(0, 170, 255),
+        ToggleOn   = Color3.fromRGB(0, 180, 255),
+        Button     = Color3.fromRGB(44, 48, 60),
+        Input      = Color3.fromRGB(20, 24, 30),
+        Hover      = Color3.fromRGB(50, 55, 70)
     },
     Fonts = {
         Title = Enum.Font.GothamBlack,
-        Body = Enum.Font.GothamMedium,
+        Body  = Enum.Font.GothamMedium,
     },
-    Radius = 12,
+    Radius = 8, -- Sedikit diperkecil agar lebih modern
 }
 
--- VARIABLES
+-- STATE VARIABLES
 local freecamEnabled = false
 local followEnabled = false
 local symLockEnabled = false
 local followMode = "OFF"
+
 local targetPlayer1 = nil
 local targetPlayer2 = nil
+
 local cameraSpeed = 1.0
 local sensitivity = 1.5
 local normalSmooth = 0.15
@@ -44,27 +57,75 @@ local shiftSmooth = 0.07
 
 local pan = Vector2.new(0, 0)
 local targetCFrame = camera.CFrame
-local defaultFOV = 70 -- Standar Roblox
+local defaultFOV = 70
 local targetFOV = defaultFOV 
 local hiddenGuis = {}
 
 -- UI HELPERS
-local function createRound(p, r) local c = Instance.new("UICorner") c.CornerRadius = UDim.new(0, r or Theme.Radius) c.Parent = p end
-local function createStroke(p, c, t) local s = Instance.new("UIStroke") s.Thickness = t or 1 s.Color = c or Theme.Colors.Border s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border s.Parent = p end
+local function createRound(parent, radius) 
+    local c = Instance.new("UICorner") 
+    c.CornerRadius = UDim.new(0, radius or Theme.Radius) 
+    c.Parent = parent 
+    return c
+end
+
+local function createStroke(parent, color, thickness) 
+    local s = Instance.new("UIStroke") 
+    s.Thickness = thickness or 1 
+    s.Color = color or Theme.Colors.Border 
+    s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border 
+    s.Parent = parent 
+    return s
+end
+
+local function makeDraggable(frame)
+    local dragging, dragInput, dragStart, startPos
+    
+    local function update(input)
+        local delta = input.Position - dragStart
+        frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+    
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+            
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    
+    frame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then update(input) end
+    end)
+end
 
 -- GUI SETUP
-local ScreenGui = Instance.new("ScreenGui", localPlayer:WaitForChild("PlayerGui"))
-ScreenGui.Name = "CinematicFreecam_Art1le_Pro"
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "CinematicFreecam_Pro"
+ScreenGui.Parent = localPlayer:WaitForChild("PlayerGui")
 ScreenGui.ResetOnSpawn = false
 ScreenGui.IgnoreGuiInset = true 
 
 local MainFrame = Instance.new("Frame", ScreenGui)
-MainFrame.Size = UDim2.new(0, 260, 0, 420) 
-MainFrame.Position = UDim2.new(0.5, -130, 0.5, -210)
+MainFrame.Size = UDim2.new(0, 260, 0, 440) -- Sedikit diperpanjang untuk ruang dropdown
+MainFrame.Position = UDim2.new(0.5, -130, 0.5, -220)
 MainFrame.BackgroundColor3 = Theme.Colors.Background
+MainFrame.Active = true -- Penting untuk draggable
 createRound(MainFrame)
 createStroke(MainFrame)
+makeDraggable(MainFrame) -- Aktifkan Draggable
 
+-- HEADER
 local Title = Instance.new("TextLabel", MainFrame)
 Title.Size = UDim2.new(1, 0, 0, 40)
 Title.Text = "FREECAM ART1LE PRO"
@@ -73,68 +134,63 @@ Title.TextColor3 = Theme.Colors.Text
 Title.TextSize = 16
 Title.BackgroundTransparency = 1
 
-local NameInput1 = Instance.new("TextBox", MainFrame)
-NameInput1.Size = UDim2.new(0.85, 0, 0, 30)
-NameInput1.Position = UDim2.new(0.075, 0, 0.12, 0)
-NameInput1.PlaceholderText = "Main Target (Player 1)..."
-NameInput1.Font = Theme.Fonts.Body
-NameInput1.TextColor3 = Theme.Colors.Text
-NameInput1.BackgroundColor3 = Theme.Colors.Input
-NameInput1.TextSize = 12
-createRound(NameInput1)
-createStroke(NameInput1)
+-- INPUT FIELDS (Function Builder)
+local function createInputGroup(yPos, placeholder)
+    local InputBox = Instance.new("TextBox", MainFrame)
+    InputBox.Size = UDim2.new(0.85, 0, 0, 30)
+    InputBox.Position = UDim2.new(0.075, 0, yPos, 0)
+    InputBox.PlaceholderText = placeholder
+    InputBox.Font = Theme.Fonts.Body
+    InputBox.TextColor3 = Theme.Colors.Text
+    InputBox.BackgroundColor3 = Theme.Colors.Input
+    InputBox.TextSize = 12
+    InputBox.TextXAlignment = Enum.TextXAlignment.Left
+    -- Padding text
+    local pad = Instance.new("UIPadding", InputBox); pad.PaddingLeft = UDim.new(0, 10)
+    createRound(InputBox, 6)
+    createStroke(InputBox)
+    
+    -- Dropdown Container (Hidden by default)
+    local ListFrame = Instance.new("ScrollingFrame", MainFrame)
+    ListFrame.Size = UDim2.new(0.85, 0, 0, 100)
+    ListFrame.Position = UDim2.new(0.075, 0, yPos + 0.08, 0) -- Tepat di bawah input
+    ListFrame.BackgroundColor3 = Theme.Colors.Surface
+    ListFrame.Visible = false
+    ListFrame.ZIndex = 5 -- Di atas elemen lain
+    ListFrame.ScrollBarThickness = 4
+    ListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+    createRound(ListFrame, 6)
+    createStroke(ListFrame)
+    
+    local Layout = Instance.new("UIListLayout", ListFrame)
+    Layout.SortOrder = Enum.SortOrder.LayoutOrder
+    
+    return InputBox, ListFrame, Layout
+end
 
-local NameInput2 = Instance.new("TextBox", MainFrame)
-NameInput2.Size = UDim2.new(0.85, 0, 0, 30)
-NameInput2.Position = UDim2.new(0.075, 0, 0.20, 0)
-NameInput2.PlaceholderText = "Second Target (for Sym)..."
-NameInput2.Font = Theme.Fonts.Body
-NameInput2.TextColor3 = Theme.Colors.Text
-NameInput2.BackgroundColor3 = Theme.Colors.Input
-NameInput2.TextSize = 12
-createRound(NameInput2)
-createStroke(NameInput2)
+local NameInput1, List1, Layout1 = createInputGroup(0.12, "Target 1 (Main Player)...")
+local NameInput2, List2, Layout2 = createInputGroup(0.20, "Target 2 (For Symmetry)...")
 
-local ToggleBtn = Instance.new("TextButton", MainFrame)
-ToggleBtn.Size = UDim2.new(0.85, 0, 0, 35)
-ToggleBtn.Position = UDim2.new(0.075, 0, 0.30, 0)
-ToggleBtn.Text = "Freecam: OFF"
-ToggleBtn.Font = Theme.Fonts.Body
-ToggleBtn.TextColor3 = Theme.Colors.Text
-ToggleBtn.BackgroundColor3 = Theme.Colors.Button
-createRound(ToggleBtn)
-createStroke(ToggleBtn)
+-- BUTTON BUILDER
+local function createButton(yPos, text)
+    local Btn = Instance.new("TextButton", MainFrame)
+    Btn.Size = UDim2.new(0.85, 0, 0, 35)
+    Btn.Position = UDim2.new(0.075, 0, yPos, 0)
+    Btn.Text = text
+    Btn.Font = Theme.Fonts.Body
+    Btn.TextColor3 = Theme.Colors.Text
+    Btn.BackgroundColor3 = Theme.Colors.Button
+    createRound(Btn)
+    createStroke(Btn)
+    return Btn
+end
 
-local FollowBtn = Instance.new("TextButton", MainFrame)
-FollowBtn.Size = UDim2.new(0.85, 0, 0, 35)
-FollowBtn.Position = UDim2.new(0.075, 0, 0.40, 0)
-FollowBtn.Text = "One-Shot Follow: OFF"
-FollowBtn.Font = Theme.Fonts.Body
-FollowBtn.TextColor3 = Theme.Colors.Text
-FollowBtn.BackgroundColor3 = Theme.Colors.Button
-createRound(FollowBtn)
-createStroke(FollowBtn)
+local ToggleBtn = createButton(0.30, "Freecam: OFF")
+local FollowBtn = createButton(0.40, "One-Shot Follow: OFF")
+local ControllFollowBtn = createButton(0.50, "Focus: OFF")
+local SymmetricalBtn = createButton(0.60, "Symmetrical Lock: OFF")
 
-local ControllFollowBtn = Instance.new("TextButton", MainFrame)
-ControllFollowBtn.Size = UDim2.new(0.85, 0, 0, 35)
-ControllFollowBtn.Position = UDim2.new(0.075, 0, 0.50, 0)
-ControllFollowBtn.Text = "Focus: OFF"
-ControllFollowBtn.Font = Theme.Fonts.Body
-ControllFollowBtn.TextColor3 = Theme.Colors.Text
-ControllFollowBtn.BackgroundColor3 = Theme.Colors.Button
-createRound(ControllFollowBtn)
-createStroke(ControllFollowBtn)
-
-local SymmetricalBtn = Instance.new("TextButton", MainFrame)
-SymmetricalBtn.Size = UDim2.new(0.85, 0, 0, 35)
-SymmetricalBtn.Position = UDim2.new(0.075, 0, 0.60, 0)
-SymmetricalBtn.Text = "Symmetrical Lock: OFF"
-SymmetricalBtn.Font = Theme.Fonts.Body
-SymmetricalBtn.TextColor3 = Theme.Colors.Text
-SymmetricalBtn.BackgroundColor3 = Theme.Colors.Button
-createRound(SymmetricalBtn)
-createStroke(SymmetricalBtn)
-
+-- INFO LABELS
 local SpeedLabel = Instance.new("TextLabel", MainFrame)
 SpeedLabel.Size = UDim2.new(1, 0, 0, 25)
 SpeedLabel.Position = UDim2.new(0, 0, 0.72, 0)
@@ -153,7 +209,73 @@ HintLabel.TextColor3 = Theme.Colors.Accent
 HintLabel.TextSize = 11
 HintLabel.BackgroundTransparency = 1
 
--- HIDE GUI LOGIC
+-- FUNCTIONALITY: AUTOCOMPLETE LOGIC
+local function updatePlayerList(inputBox, listFrame, listLayout)
+    -- Bersihkan list lama
+    for _, v in pairs(listFrame:GetChildren()) do
+        if v:IsA("TextButton") then v:Destroy() end
+    end
+    
+    local text = inputBox.Text:lower()
+    if text == "" then 
+        listFrame.Visible = false 
+        return 
+    end
+    
+    local matches = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= localPlayer then
+            if p.Name:lower():match(text) or p.DisplayName:lower():match(text) then
+                table.insert(matches, p)
+            end
+        end
+    end
+    
+    if #matches > 0 then
+        listFrame.Visible = true
+        local contentHeight = 0
+        
+        for _, p in ipairs(matches) do
+            local item = Instance.new("TextButton", listFrame)
+            item.Size = UDim2.new(1, 0, 0, 25)
+            item.BackgroundTransparency = 1
+            item.Text = "  " .. p.DisplayName .. " (@" .. p.Name .. ")"
+            item.TextColor3 = Theme.Colors.Text
+            item.Font = Theme.Fonts.Body
+            item.TextSize = 11
+            item.TextXAlignment = Enum.TextXAlignment.Left
+            item.ZIndex = 6
+            
+            contentHeight = contentHeight + 25
+            
+            item.MouseButton1Click:Connect(function()
+                inputBox.Text = p.Name
+                listFrame.Visible = false
+                inputBox:ReleaseFocus()
+            end)
+        end
+        listFrame.CanvasSize = UDim2.new(0, 0, 0, contentHeight)
+    else
+        listFrame.Visible = false
+    end
+end
+
+NameInput1:GetPropertyChangedSignal("Text"):Connect(function() updatePlayerList(NameInput1, List1, Layout1) end)
+NameInput2:GetPropertyChangedSignal("Text"):Connect(function() updatePlayerList(NameInput2, List2, Layout2) end)
+
+-- Handle focus lost to hide list
+NameInput1.FocusLost:Connect(function() wait(0.2) List1.Visible = false end)
+NameInput2.FocusLost:Connect(function() wait(0.2) List2.Visible = false end)
+
+-- CORE LOGIC
+local function getTarget(name)
+    if not name or name == "" then return nil end
+    for _, p in ipairs(Players:GetPlayers()) do
+        if string.find(string.lower(p.DisplayName), string.lower(name)) or string.find(string.lower(p.Name), string.lower(name)) then return p end
+    end
+    return nil
+end
+
 local function setOtherUIVisible(visible)
     pcall(function() StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, visible) end)
     if not visible then
@@ -165,26 +287,14 @@ local function setOtherUIVisible(visible)
         end
     else
         for _, gui in ipairs(hiddenGuis) do
-            if gui and gui.Parent then
-                gui.Enabled = true
-            end
+            if gui and gui.Parent then gui.Enabled = true end
         end
         hiddenGuis = {}
     end
 end
 
--- UTILS
-local function getTarget(name)
-    if not name or name == "" then return nil end
-    for _, p in ipairs(Players:GetPlayers()) do
-        if string.find(string.lower(p.DisplayName), string.lower(name)) or string.find(string.lower(p.Name), string.lower(name)) then return p end
-    end
-    return nil
-end
-
 -- CAMERA LOOP
 RunService.RenderStepped:Connect(function(dt)
-    -- Logika Lerp FOV selalu jalan agar transisi halus, baik saat ON atau saat dimatikan
     camera.FieldOfView = camera.FieldOfView + (targetFOV - camera.FieldOfView) * normalSmooth
     
     if not freecamEnabled then return end
@@ -230,10 +340,10 @@ RunService.RenderStepped:Connect(function(dt)
     end
     
     camera.CFrame = camera.CFrame:Lerp(targetCFrame, moveSmooth)
-    SpeedLabel.Text = "Speed: " .. string.format("%.1f", cameraSpeed) .. " | Zoom: " .. math.floor(camera.FieldOfView) .. (isShiftDown and " [CINEMATIC]" or "")
+    SpeedLabel.Text = string.format("Speed: %.1f | Zoom: %d %s", cameraSpeed, math.floor(camera.FieldOfView), (isShiftDown and "[CINEMATIC]" or ""))
 end)
 
--- BUTTONS
+-- BUTTON CONNECTS
 ToggleBtn.MouseButton1Click:Connect(function()
     freecamEnabled = not freecamEnabled
     ToggleBtn.Text = freecamEnabled and "Freecam: ON" or "Freecam: OFF"
@@ -250,7 +360,6 @@ ToggleBtn.MouseButton1Click:Connect(function()
         if hrp then hrp.Anchored = true end
         setOtherUIVisible(false)
     else
-        -- RESET KE DEFAULT SAAT OFF
         targetFOV = defaultFOV 
         camera.CameraType = Enum.CameraType.Custom
         Controls:Enable()
@@ -261,7 +370,6 @@ ToggleBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- LOGIKA BUTTON LAIN TETAP SAMA
 FollowBtn.MouseButton1Click:Connect(function()
     if not freecamEnabled then return end
     targetPlayer1 = getTarget(NameInput1.Text)
@@ -294,18 +402,21 @@ SymmetricalBtn.MouseButton1Click:Connect(function()
 end)
 
 -- INPUTS
-UserInputService.InputBegan:Connect(function(i, g)
-    if i.KeyCode == Enum.KeyCode.N then 
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    -- FIX: Jika gameProcessed = true (berarti sedang ngetik di chat/textbox), abaikan tombol N
+    if input.KeyCode == Enum.KeyCode.N and not gameProcessed then 
         ScreenGui.Enabled = not ScreenGui.Enabled 
     end
-    if g then return end 
-    if i.KeyCode == Enum.KeyCode.Up then cameraSpeed = math.clamp(cameraSpeed + 0.1, 0.1, 20)
-    elseif i.KeyCode == Enum.KeyCode.Down then cameraSpeed = math.clamp(cameraSpeed - 0.1, 0.1, 20) end
+    
+    if gameProcessed then return end 
+    
+    if input.KeyCode == Enum.KeyCode.Up then cameraSpeed = math.clamp(cameraSpeed + 0.1, 0.1, 20)
+    elseif input.KeyCode == Enum.KeyCode.Down then cameraSpeed = math.clamp(cameraSpeed - 0.1, 0.1, 20) end
 end)
 
-UserInputService.InputChanged:Connect(function(i)
+UserInputService.InputChanged:Connect(function(input)
     if not freecamEnabled then return end
-    if i.UserInputType == Enum.UserInputType.MouseWheel then
-        targetFOV = math.clamp(targetFOV - (i.Position.Z * 5), 5, 120)
+    if input.UserInputType == Enum.UserInputType.MouseWheel then
+        targetFOV = math.clamp(targetFOV - (input.Position.Z * 5), 5, 120)
     end
 end)
