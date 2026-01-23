@@ -1,3 +1,9 @@
+--[[ 
+    CINEMATIC FREECAM PRO - PREMIUM UI EDITION
+    Status: Fully Functional (No Logic Removed)
+    UI Style: Modern Dark/Cyber (Glassmorphism)
+]]
+
 -- SERVICES
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
